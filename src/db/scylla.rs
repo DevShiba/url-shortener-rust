@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use scylla::{
-    client::session::Session,
-    client::session_builder::SessionBuilder,
+    client::session::Session, client::session_builder::SessionBuilder,
     statement::prepared::PreparedStatement,
 };
 
