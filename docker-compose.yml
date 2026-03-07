@@ -1,0 +1,69 @@
+services:
+  scylladb:
+    image: scylladb/scylla:6.2
+    container_name: url-shortener-scylla
+    command: --developer-mode=1
+    ports:
+      - "9042:9042"
+    volumes:
+      - scylla-data:/var/lib/scylla
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
+  redis-counter:
+    image: redis:7-alpine
+    container_name: url-shortener-redis-counter
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: url-shortener-redis-cache
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  migrator:
+    image: scylladb/scylla:6.2
+    container_name: url-shortener-migrator
+    depends_on:
+      scylladb:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations:ro
+    entrypoint: ["/bin/sh", "-c", "cqlsh scylladb -f /migrations/init.cql"]
+    restart: on-failure
+
+  backend:
+    build: .
+    container_name: url-shortener-backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    depends_on:
+      scylladb:
+        condition: service_healthy
+      redis-counter:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+
+volumes:
+  scylla-data:
