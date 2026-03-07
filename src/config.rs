@@ -18,11 +18,9 @@ impl Config {
         dotenv::dotenv().ok();
 
         Ok(Self {
-            server_port: env_var("SERVER_PORT")?
-                .parse::<u16>()
-                .map_err(|_| AppError::Config(
-                    "SERVER_PORT must be a valid port number (1–65535)".into(),
-                ))?,
+            server_port: env_var("SERVER_PORT")?.parse::<u16>().map_err(|_| {
+                AppError::Config("SERVER_PORT must be a valid port number (1–65535)".into())
+            })?,
 
             short_domain: env_var("SHORT_DOMAIN")?,
 
@@ -42,14 +40,13 @@ impl Config {
 
             hashids_min_length: env_var("HASHIDS_MIN_LENGTH")?
                 .parse::<usize>()
-                .map_err(|_| AppError::Config(
-                    "HASHIDS_MIN_LENGTH must be a positive integer".into(),
-                ))?,
+                .map_err(|_| {
+                    AppError::Config("HASHIDS_MIN_LENGTH must be a positive integer".into())
+                })?,
         })
     }
 }
 
 fn env_var(key: &str) -> Result<String, AppError> {
-    std::env::var(key)
-        .map_err(|_| AppError::Config(format!("missing environment variable: {key}")))
+    std::env::var(key).map_err(|_| AppError::Config(format!("missing environment variable: {key}")))
 }
