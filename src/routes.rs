@@ -1,9 +1,13 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use axum::{
     Router,
     routing::{get, post},
 };
+use tower_http::{
+    compression::CompressionLayer, timeout::TimeoutLayer, trace::TraceLayer,
+};
+
 
 use crate::{
     cache::redis::RedisStore,
@@ -25,5 +29,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/shorten", post(shorten_handler))
         .route("/{shortcode}", get(redirect_handler))
+        .layer(CompressionLayer::new())
+        .layer(TimeoutLayer::new(Duration::from_secs(10)))
+        .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
