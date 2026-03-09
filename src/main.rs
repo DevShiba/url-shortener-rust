@@ -7,9 +7,10 @@ mod models;
 mod routes;
 mod utils;
 
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use tokio::net::TcpListener;
+use tower_governor::governor::GovernorConfigBuilder;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 use crate::{
@@ -44,13 +45,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config: Arc::clone(&config),
     });
 
-    let router = build_router(state);
+    // 10 req/s per IP on POST /shorten, burst of 20
+    let governor_conf = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_millisecond(100)
+            .burst_size(20)
+            .finish()
+            .ok_or("failed to build rate limiter: invalid configuration")?,
+    );
+
+    // evict stale per-IP entries every 60s to prevent unbounded memory growth
+    let governor_limiter = governor_conf.limiter().clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(60));
+        governor_limiter.retain_recent();
+    });
+
+    let router = build_router(state, governor_conf);
     let addr = format!("0.0.0.0:{}", config.server_port);
     let listener = TcpListener::bind(&addr).await?;
 
     tracing::info!(addr = %addr, "server listening");
 
-    axum::serve(listener, router).await?;
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }
